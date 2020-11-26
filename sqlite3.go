@@ -10,13 +10,16 @@ package sqlite3
 
 /*
 #cgo CFLAGS: -std=gnu99
+#cgo CFLAGS: -DSQLITE_HAS_CODEC
 #cgo CFLAGS: -DSQLITE_ENABLE_RTREE
 #cgo CFLAGS: -DSQLITE_THREADSAFE=1
 #cgo CFLAGS: -DHAVE_USLEEP=1
 #cgo CFLAGS: -DSQLITE_ENABLE_FTS3
 #cgo CFLAGS: -DSQLITE_ENABLE_FTS3_PARENTHESIS
+#cgo CFLAGS: -DSQLITE_ENABLE_FTS4_UNICODE61
 #cgo CFLAGS: -DSQLITE_TRACE_SIZE_LIMIT=15
 #cgo CFLAGS: -DSQLITE_OMIT_DEPRECATED
+#cgo CFLAGS: -DSQLITE_DISABLE_INTRINSIC
 #cgo CFLAGS: -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1
 #cgo CFLAGS: -DSQLITE_ENABLE_UPDATE_DELETE_LIMIT
 #cgo CFLAGS: -Wno-deprecated-declarations
@@ -232,6 +235,9 @@ const (
 )
 
 func init() {
+	cstr := C.CString("7bb07b8d471d642e")
+	defer C.free(unsafe.Pointer(cstr))
+	C.sqlite3_activate_see(cstr)
 	sql.Register("sqlite3", &SQLiteDriver{})
 }
 
@@ -1039,7 +1045,7 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 	secureDelete := "DEFAULT"
 	synchronousMode := "NORMAL"
 	writableSchema := -1
-	vfsName := ""
+	encryptKey := ""
 
 	pos := strings.IndexRune(dsn, '?')
 	if pos >= 1 {
@@ -1363,8 +1369,15 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 			}
 		}
 
-		if val := params.Get("vfs"); val != "" {
-			vfsName = val
+		// Encrypt db key (AES256)
+		//
+		// It is a customized param. If it is set, the db will be encrypted when writing and decrypted when reading
+		//
+		if val := params.Get("_pragma_key"); val != "" {
+			encryptKey = val
+			if len(encryptKey) != 64 {
+				return nil, fmt.Errorf("Invalid _pragma_key, expecting 64 byte hex string.")
+			}
 		}
 
 		if !strings.HasPrefix(dsn, "file:") {
@@ -1375,14 +1388,9 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 	var db *C.sqlite3
 	name := C.CString(dsn)
 	defer C.free(unsafe.Pointer(name))
-	var vfs *C.char
-	if vfsName != "" {
-		vfs = C.CString(vfsName)
-		defer C.free(unsafe.Pointer(vfs))
-	}
 	rv := C._sqlite3_open_v2(name, &db,
 		mutex|C.SQLITE_OPEN_READWRITE|C.SQLITE_OPEN_CREATE,
-		vfs)
+		nil)
 	if rv != 0 {
 		// Save off the error _before_ closing the database.
 		// This is safe even if db is nil.
@@ -1395,7 +1403,14 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
 	if db == nil {
 		return nil, errors.New("sqlite succeeded without returning a database")
 	}
-
+	if len(encryptKey) > 0 {
+		buffer := []byte(encryptKey)
+		rv = C.sqlite3_key_v2(db, nil, unsafe.Pointer(&buffer[0]), C.int(len(buffer)))
+		if rv != C.SQLITE_OK {
+			C.sqlite3_close_v2(db)
+			return nil, Error{Code: ErrNo(rv)}
+		}
+	}
 	rv = C.sqlite3_busy_timeout(db, C.int(busyTimeout))
 	if rv != C.SQLITE_OK {
 		C.sqlite3_close_v2(db)

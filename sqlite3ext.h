@@ -52,6 +52,11 @@ struct sqlite3_api_routines {
                            int eTextRep,const char*));
   int  (*collation_needed16)(sqlite3*,void*,void(*)(void*,sqlite3*,
                              int eTextRep,const void*));
+  int (*key)(sqlite3*, const void*, int);
+  int (*key_v2)(sqlite3*, const char*, const void*, int);
+  int (*rekey)(sqlite3*, const void*, int);
+  int (*rekey_v2)(sqlite3*, const char*, const void*, int);
+  void (*activate_see)(const char*);
   const void * (*column_blob)(sqlite3_stmt*,int iCol);
   int  (*column_bytes)(sqlite3_stmt*,int iCol);
   int  (*column_bytes16)(sqlite3_stmt*,int iCol);
@@ -640,6 +645,13 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_create_filename        sqlite3_api->create_filename
 #define sqlite3_free_filename          sqlite3_api->free_filename
 #define sqlite3_database_file_object   sqlite3_api->database_file_object
+#ifdef SQLITE_HAS_CODEC
+#define sqlite3_key                    sqlite3_api->sqlite3_key
+#define sqlite3_key_v2                 sqlite3_api->sqlite3_key_v2
+#define sqlite3_rekey                  sqlite3_api->sqlite3_rekey
+#define sqlite3_rekey_v2               sqlite3_api->sqlite3_rekey_v2
+#define sqlite3_activate_see           sqlite3_api->sqlite3_active_see
+#endif
 #endif /* !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) */
 
 #if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION)

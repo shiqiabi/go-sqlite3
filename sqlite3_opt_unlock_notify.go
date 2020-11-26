@@ -9,6 +9,7 @@
 package sqlite3
 
 /*
+#cgo CFLAGS: -DSQLITE_HAS_CODEC
 #cgo CFLAGS: -DSQLITE_ENABLE_UNLOCK_NOTIFY
 
 #include <stdlib.h>

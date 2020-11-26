@@ -8,6 +8,7 @@
 package sqlite3
 
 /*
+#cgo CFLAGS: -DSQLITE_HAS_CODEC
 #ifndef USE_LIBSQLITE3
 #include <sqlite3-binding.h>
 #else

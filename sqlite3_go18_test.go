@@ -150,11 +150,8 @@ func TestExecContextCancel(t *testing.T) {
 	ts := time.Now()
 	initDatabase(t, db, 1000)
 	spent := time.Since(ts)
-	const minTestTime = 100 * time.Millisecond
-	if spent < minTestTime {
-		t.Skipf("test will be too racy (spent=%s < min=%s) as ExecContext below will be too fast.",
-			spent.String(), minTestTime.String(),
-		)
+	if spent < 100*time.Millisecond {
+		t.Skip("test will be too racy, as ExecContext below will be too fast.")
 	}
 
 	// expected to be extremely slow query
@@ -163,17 +160,14 @@ INSERT INTO test_table (key1, key_id, key2, key3, key4, key5, key6, data)
 SELECT t1.key1 || t2.key1, t1.key_id || t2.key_id, t1.key2 || t2.key2, t1.key3 || t2.key3, t1.key4 || t2.key4, t1.key5 || t2.key5, t1.key6 || t2.key6, t1.data || t2.data
 FROM test_table t1 LEFT OUTER JOIN test_table t2`
 	// expect query above take ~ same time as setup above
-	// This is racy: the context must be valid so sql/db.ExecContext calls the sqlite3 driver.
-	// It starts the query, the context expires, then calls sqlite3_interrupt
-	ctx, cancel := context.WithTimeout(context.Background(), minTestTime/2)
+	ctx, cancel := context.WithTimeout(context.Background(), spent/2)
 	defer cancel()
 	ts = time.Now()
 	r, err := db.ExecContext(ctx, q)
 	// racy check
 	if r != nil {
 		n, err := r.RowsAffected()
-		t.Logf("query should not have succeeded: rows=%d; err=%v; duration=%s",
-			n, err, time.Since(ts).String())
+		t.Log(n, err, time.Since(ts))
 	}
 	if err != context.DeadlineExceeded {
 		t.Fatal(err, ctx.Err())
